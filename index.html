@@ -273,6 +273,7 @@ footer { background: var(--paper); border-top: 1px solid var(--border); padding:
 <script>
 const SECTIONS = [
   { id: 'start', label: 'Getting Started', fns: [] },
+  { id: 'bdd', label: 'BDD & Cucumber', fns: [] },
   { id: 'sel', label: 'Selectors', fns: [] },
   { id: 'act', label: 'Commands & Actions', fns: [] },
   { id: 'assert', label: 'Assertions', fns: [] },
@@ -280,6 +281,244 @@ const SECTIONS = [
   { id: 'api', label: 'API Testing', fns: [] },
   { id: 'adv', label: 'Advanced', fns: [] },
 ];
+
+SECTIONS.find(s => s.id === 'bdd').fns = [
+    {
+      name: 'describe / context / it — BDD-style grouping', ret: 'void', short: 'Cypress ships with Mocha — use describe, context, and it() for BDD structure',
+      desc: 'Cypress is built on Mocha, which natively supports BDD-style test organisation. describe() groups related scenarios, context() is an alias for describe() used for "given a certain state" groupings, and it() replaces the generic test name. No extra packages — this is how most real Cypress suites are structured.',
+      use: 'Every Cypress suite — BDD-style naming with describe/context/it is the idiomatic Cypress way of writing tests, whether or not you use Gherkin.',
+      examples: [
+        { label: 'Basic describe / it structure', code: `describe('Login page', () => {
+  it('shows an error for invalid credentials', () => {
+    cy.visit('/login');
+    cy.get('#email').type('bad@test.com');
+    cy.get('#password').type('wrongpass');
+    cy.get('button[type=submit]').click();
+    cy.contains('Invalid credentials').should('be.visible');
+  });
+});` },
+        { label: 'context() — "given a state" readability', code: `describe('Shopping cart', () => {
+  context('when the cart is empty', () => {
+    it('shows an empty state message', () => {
+      cy.visit('/cart');
+      cy.contains('Your cart is empty').should('be.visible');
+    });
+  });
+
+  context('when the cart has items', () => {
+    beforeEach(() => {
+      cy.addItemToCart('laptop'); // custom command
+    });
+
+    it('shows the item count', () => {
+      cy.get('[data-cy=cart-count]').should('contain', '1');
+    });
+  });
+});` },
+        { label: 'Given / When / Then naming convention', code: `describe('Product search', () => {
+  it('Given I am on the homepage, When I search, Then results appear', () => {
+    // Given
+    cy.visit('/');
+    // When
+    cy.get('[data-testid="search"]').type('laptop{enter}');
+    // Then
+    cy.get('.product-card').should('have.length.gt', 0);
+  });
+});` },
+        { label: 'before / beforeEach / after / afterEach hooks', code: `describe('User account', () => {
+  before(() => {
+    // runs once before all tests in this block
+    cy.seed('test-user');
+  });
+
+  beforeEach(() => {
+    // runs before each test — ideal for login
+    cy.login('user@example.com', 'password');
+    cy.visit('/account');
+  });
+
+  afterEach(() => {
+    cy.clearCookies(); // clean up between tests
+  });
+
+  it('can update display name', () => {
+    cy.get('[data-cy=display-name]').clear().type('New Name');
+    cy.get('[data-cy=save]').click();
+    cy.contains('Saved').should('be.visible');
+  });
+});` },
+        { label: 'it.only / it.skip — focus or skip a scenario', code: `describe('Checkout', () => {
+  it.only('completes with credit card', () => {
+    // only this test runs — useful while debugging
+  });
+
+  it.skip('completes with PayPal', () => {
+    // skipped — work in progress
+  });
+});` },
+      ]
+    },
+    {
+      name: '@badeball/cypress-cucumber-preprocessor', ret: 'BDD', short: 'Write Gherkin .feature files with Cucumber step definitions in Cypress',
+      desc: '@badeball/cypress-cucumber-preprocessor is the current recommended Cypress-Cucumber package (the older "cypress-cucumber-preprocessor" by TheBrainFamily is now deprecated). It compiles .feature files and maps them to Cypress step definitions, giving you full Gherkin support (Feature, Scenario, Background, Scenario Outline, Tags) while running through the Cypress Test Runner.',
+      use: 'When your QA team or product team writes acceptance criteria in Gherkin and you want those .feature files to be your executable tests — no translation layer.',
+      examples: [
+        { label: 'Install and configure', code: `npm install -D @badeball/cypress-cucumber-preprocessor
+npm install -D @bahmutov/cypress-esbuild-preprocessor
+
+# cypress.config.js
+const { defineConfig } = require('cypress');
+const createBundler = require('@bahmutov/cypress-esbuild-preprocessor');
+const { addCucumberPreprocessorPlugin } = require('@badeball/cypress-cucumber-preprocessor');
+const { createEsbuildPlugin } = require('@badeball/cypress-cucumber-preprocessor/esbuild');
+
+module.exports = defineConfig({
+  e2e: {
+    specPattern: 'cypress/e2e/**/*.feature',
+    async setupNodeEvents(on, config) {
+      await addCucumberPreprocessorPlugin(on, config);
+      on('file:preprocessor', createBundler({
+        plugins: [createEsbuildPlugin(config)],
+      }));
+      return config;
+    },
+  },
+});` },
+        { label: 'A .feature file (Gherkin)', code: `# cypress/e2e/login/login.feature
+Feature: Login
+
+  Background:
+    Given I am on the login page
+
+  Scenario: Successful login
+    When I enter valid credentials
+    Then I should be on the dashboard
+
+  Scenario: Failed login
+    When I enter invalid credentials
+    Then I should see an error message` },
+        { label: 'Step definitions (.ts)', code: `// cypress/e2e/login/login.ts  (same folder as .feature)
+import { Given, When, Then } from '@badeball/cypress-cucumber-preprocessor';
+
+Given('I am on the login page', () => {
+  cy.visit('/login');
+});
+
+When('I enter valid credentials', () => {
+  cy.get('#email').type('user@example.com');
+  cy.get('#password').type('password');
+  cy.get('button[type=submit]').click();
+});
+
+When('I enter invalid credentials', () => {
+  cy.get('#email').type('wrong@test.com');
+  cy.get('#password').type('wrong');
+  cy.get('button[type=submit]').click();
+});
+
+Then('I should be on the dashboard', () => {
+  cy.url().should('include', '/dashboard');
+});
+
+Then('I should see an error message', () => {
+  cy.contains('Invalid credentials').should('be.visible');
+});` },
+        { label: 'Scenario Outline — data-driven tests', code: `# cypress/e2e/search/search.feature
+Feature: Product search
+
+  Scenario Outline: Search returns relevant results
+    Given I am on the homepage
+    When I search for "<term>"
+    Then I see results containing "<expected>"
+
+    Examples:
+      | term    | expected |
+      | laptop  | Laptop   |
+      | phone   | Phone    |
+      | tablet  | Tablet   |` },
+        { label: 'Tags — run only tagged scenarios', code: `# Tag a scenario in the .feature file:
+@smoke @critical
+Scenario: User can log in
+
+@regression
+Scenario: User can reset password
+
+# Run only @smoke scenarios:
+npx cypress run --env tags="@smoke"
+
+# Run @smoke but exclude @wip:
+npx cypress run --env tags="@smoke and not @wip"` },
+      ]
+    },
+    {
+      name: 'Shared step definitions (global steps)', ret: 'BDD', short: 'Reuse step definitions across multiple feature files',
+      desc: 'In real projects you quickly accumulate shared steps (login, navigation, common assertions) that many feature files need. The preprocessor auto-discovers step definitions from the paths you configure, so you can put shared steps in a common folder and feature-specific steps alongside their .feature file.',
+      use: 'Any project with more than one feature file — shared steps prevent you from copy-pasting the same "Given I am logged in" step into every feature.',
+      examples: [
+        { label: 'Configure global step folder', code: `# package.json — tell the preprocessor where to look
+{
+  "@badeball/cypress-cucumber-preprocessor": {
+    "stepDefinitions": [
+      "cypress/e2e/common/**/*.ts",
+      "cypress/e2e/**/*.ts"
+    ]
+  }
+}` },
+        { label: 'Common step definitions', code: `// cypress/e2e/common/auth.steps.ts
+import { Given } from '@badeball/cypress-cucumber-preprocessor';
+
+Given('I am logged in as {string}', (role: string) => {
+  cy.session(role, () => {
+    cy.request('POST', '/api/login', {
+      email: \`\${role}@example.com\`,
+      password: 'password',
+    }).then(({ body }) => {
+      window.localStorage.setItem('token', body.token);
+    });
+  });
+  cy.visit('/');
+});` },
+        { label: 'Use shared steps in any feature', code: `# cypress/e2e/orders/orders.feature
+Feature: Orders
+
+  Scenario: Admin views all orders
+    Given I am logged in as "admin"   # <-- shared step
+    When I navigate to "/orders"
+    Then I see the orders table
+
+  Scenario: Customer views own orders
+    Given I am logged in as "customer" # <-- same shared step
+    When I navigate to "/my-orders"
+    Then I see only my orders` },
+        { label: 'Background — run steps before every scenario', code: `# cypress/e2e/products/products.feature
+Feature: Product management
+
+  Background:
+    Given I am logged in as "admin"
+    And the product catalog has "10" items
+
+  Scenario: Admin adds a product
+    When I click "Add Product"
+    And I fill in the product form
+    Then the catalog has "11" items
+
+  Scenario: Admin deletes a product
+    When I delete the first product
+    Then the catalog has "9" items` },
+        { label: 'BDD + cy.session() for fast auth', code: `// cypress/e2e/common/auth.steps.ts
+// Use cy.session() so login only fires ONCE per role, not before every scenario
+Given('I am logged in as {string}', (role: string) => {
+  cy.session([role], () => {
+    cy.visit('/login');
+    cy.get('#email').type(\`\${role}@example.com\`);
+    cy.get('#password').type('password');
+    cy.get('button[type=submit]').click();
+    cy.url().should('include', '/dashboard');
+  });
+});` },
+      ]
+    },
+  ];
 
 SECTIONS.find(s => s.id === 'start').fns = [
     {
@@ -831,17 +1070,26 @@ module.exports = {
       },
     ];
 
-let activeFilter = 'All';
+let activeFilter = 'start';
 let activeCommandKey = null;
 
 function buildFilterChips() {
   const wrap = document.getElementById('filterChips');
-  const all = [{ id: 'All', label: 'All' }, ...SECTIONS];
-  wrap.innerHTML = all.map(s => `
+  wrap.innerHTML = SECTIONS.map(s => `
     <button class="filter-chip${s.id === activeFilter ? ' active' : ''}" onclick="setFilter('${s.id}')">${s.label}</button>
   `).join('');
 }
-function setFilter(id) { activeFilter = id; buildFilterChips(); renderLog(document.getElementById('search').value); }
+function setFilter(id) {
+  activeFilter = id;
+  activeCommandKey = null;
+  // clear the search box when switching tabs
+  document.getElementById('search').value = '';
+  buildFilterChips();
+  renderLog('');
+  // auto-select first command in the new section
+  const section = SECTIONS.find(s => s.id === id);
+  if (section && section.fns.length > 0) selectCommand(section.id, 0);
+}
 
 function renderLog(query = '') {
   const q = query.toLowerCase().trim();
@@ -850,21 +1098,25 @@ function renderLog(query = '') {
   let total = 0;
 
   SECTIONS.forEach(section => {
-    if (activeFilter !== 'All' && section.id !== activeFilter) return;
-    const fns = section.fns.filter(fn => {
-      if (!q) return true;
-      return fn.name.toLowerCase().includes(q) || fn.short.toLowerCase().includes(q) ||
-             fn.desc.toLowerCase().includes(q) || fn.use.toLowerCase().includes(q);
-    });
-    if (!fns.length) return;
-    total += fns.length;
+    // when searching, show all sections; when browsing, respect the active tab
+    if (!q && section.id !== activeFilter) return;
+    // keep track of real indices in section.fns, not filtered indices
+    const matchedFns = section.fns
+      .map((fn, realIdx) => ({ fn, realIdx }))
+      .filter(({ fn }) => {
+        if (!q) return true;
+        return fn.name.toLowerCase().includes(q) || fn.short.toLowerCase().includes(q) ||
+               fn.desc.toLowerCase().includes(q) || fn.use.toLowerCase().includes(q);
+      });
+    if (!matchedFns.length) return;
+    total += matchedFns.length;
     html += `
       <div class="log-section">
-        <div class="log-section-head">${section.label}<span class="count-badge">${fns.length}</span></div>
-        ${fns.map((fn, i) => {
-          const key = section.id + '__' + i;
+        <div class="log-section-head">${section.label}<span class="count-badge">${matchedFns.length}</span></div>
+        ${matchedFns.map(({ fn, realIdx }, i) => {
+          const key = section.id + '__' + realIdx;
           return `
-          <div class="log-entry${key === activeCommandKey ? ' active' : ''}" data-key="${key}" onclick="selectCommand('${section.id}', ${i})">
+          <div class="log-entry${key === activeCommandKey ? ' active' : ''}" data-key="${key}" onclick="selectCommand('${section.id}', ${realIdx})">
             <span class="log-num">${String(i + 1).padStart(2,'0')}</span>
             <span class="log-check">✓</span>
             <div class="log-text">
@@ -947,7 +1199,27 @@ function applyTheme(t) {
 applyTheme(localStorage.getItem('cy2-theme') || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'));
 themeBtn.addEventListener('click', () => applyTheme(htmlEl.getAttribute('data-theme') === 'dark' ? 'light' : 'dark'));
 
-document.getElementById('search').addEventListener('input', e => renderLog(e.target.value));
+document.getElementById('search').addEventListener('input', e => {
+  const q = e.target.value.toLowerCase().trim();
+  renderLog(e.target.value);
+  // if current selection is no longer visible, jump to first match
+  let currentVisible = false;
+  for (const section of SECTIONS) {
+    section.fns.forEach((fn, realIdx) => {
+      const matches = !q || fn.name.toLowerCase().includes(q) || fn.short.toLowerCase().includes(q) || fn.desc.toLowerCase().includes(q) || fn.use.toLowerCase().includes(q);
+      if (matches && (section.id + '__' + realIdx) === activeCommandKey) currentVisible = true;
+    });
+  }
+  if (!currentVisible) {
+    activeCommandKey = null;
+    for (const section of SECTIONS) {
+      // when searching, scan all sections; when clearing, respect active tab
+      if (!q && section.id !== activeFilter) continue;
+      const firstMatch = section.fns.findIndex(fn => !q || fn.name.toLowerCase().includes(q) || fn.short.toLowerCase().includes(q) || fn.desc.toLowerCase().includes(q) || fn.use.toLowerCase().includes(q));
+      if (firstMatch !== -1) { selectCommand(section.id, firstMatch); break; }
+    }
+  }
+});
 
 buildFilterChips();
 computeStats();
@@ -955,8 +1227,8 @@ renderLog();
 
 // Auto-select the first command so the snapshot isn't empty on load
 setTimeout(() => {
-  const firstSection = SECTIONS.find(s => s.fns.length > 0);
-  if (firstSection) selectCommand(firstSection.id, 0);
+  const startSection = SECTIONS.find(s => s.id === 'start' && s.fns.length > 0);
+  if (startSection) selectCommand(startSection.id, 0);
 }, 50);
 </script>
 </body>
